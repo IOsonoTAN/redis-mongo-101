@@ -1,0 +1,20 @@
+<html>
+    <head>
+        <title>Boardcast</title>
+    </head>
+    <body>
+        <ul id="users"></ul>
+    </body>
+    <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        $(function() {
+            const socket = io()
+        
+            socket.on('new', data => {
+                console.log('data ->', data)
+                $('#users').append('<li>'+ data.name +'</li>')
+            })
+        })
+    </script>
+</html>

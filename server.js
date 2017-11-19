@@ -2,14 +2,20 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const { MongoClient } = require('mongodb')
 const Promise = require('bluebird')
+const redis = require('redis')
+const path = require('path')
+
+let db
+let io
+
+const app = express()
+const port = 3000
 
 const redisConfig = {
     port: 6379,
     host: '192.168.99.100'
 }
-const redis = require('redis')
 const client = Promise.promisifyAll(redis.createClient(redisConfig.port, redisConfig.host))
-
 client.on('connect', () => {
     console.log('connect to redis is connected.')
 })
@@ -20,13 +26,10 @@ const mongodbUrl = 'mongodb://192.168.99.100:27017/' + mongodbName
 
 const collectionUser = 'users'
 
-let db
-
-const app = express()
-const port = 3000
-
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(bodyParser.json())
+
+app.use(express.static(path.join(__dirname, 'public')))
 
 const keyGetUsers = 'userlist'
 
@@ -46,11 +49,23 @@ app.get('/users', async (req, res) => {
     }
 })
 
+
+app.get('/', (req, res) => {
+    res.render(__dirname + "/index.html")
+})
+
 // Add new user
 app.post('/users', async (req, res) => {
     try {
-        const result = await db.collection(collectionUser).save(req.body)
+        const body = req.body
+
+        const result = await db.collection(collectionUser).save(body)
         console.log('user has been added.')
+
+        io.on('connection', (socket) => {
+            console.log('io on connection')
+            socket.emit('new', body)
+        })
 
         await client.delAsync(keyGetUsers)
         console.log('redis key removed.')
@@ -69,7 +84,8 @@ MongoClient.connect(mongodbUrl, (err, database) => {
 
     console.log('connect to database is successfuly')
 
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
         console.log('app is listening on port ' + port)
     })
+    io = require('socket.io')(server)
 })
