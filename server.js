@@ -1,13 +1,14 @@
 const express = require('express')
 const bodyParser = require('body-parser')
 const { MongoClient } = require('mongodb')
+const redis = require('redis')
+const Promise = require('bluebird')
 
 const redisConfig = {
     port: 6379,
     host: '192.168.99.100'
 }
-const redis = require('redis')
-const client = redis.createClient(redisConfig.port, redisConfig.host)
+const client = Promise.promisifyAll(redis.createClient(redisConfig.port, redisConfig.host))
 
 client.on('connect', () => {
     console.log('connect to redis is connected.')
@@ -28,36 +29,20 @@ app.use(bodyParser.urlencoded({ extended: true }))
 app.use(bodyParser.json())
 
 // Get user list
-app.get('/users', (req, res) => {
+app.get('/users', async (req, res) => {
     const keyGetUsers = 'userlist'
 
-    client.get(keyGetUsers, (err, result) => {
-        if (err) {
-            console.log('redis get err ->', err)
-        } else if (!result) {
-            // db.users.find()
-            db.collection(collectionUser).find().toArray((err, results) => {
-                if (err) {
-                    console.log('user list err ->', err)
-                }
+    const result = await client.getAsync(keyGetUsers)
+    
+    if (!result) {
+        const dbResult = await db.collection(collectionUser).find().toArray()
 
-                // Set user list from Redis
-                client.set(keyGetUsers, JSON.stringify(results), (err, setSuccess) => {
-                    if (err) {
-                        console.log('redis err ->', err)
-                    }
+        await client.set(keyGetUsers, JSON.stringify(dbResult))
 
-                    console.log('results ->', results)
-
-                    // setSuccess OK
-                    res.send(results)
-                })
-            })
-        }
-
-        // get result from Redis as string
-        res.send(JSON.parse(result))
-    })
+        res.send(dbResult)
+        return
+    }
+    res.send(JSON.parse(result))
 })
 
 // Add new user
